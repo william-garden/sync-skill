@@ -1,0 +1,48 @@
+{
+  "name": "sync-skill",
+  "version": "0.1.0",
+  "description": "One-click synchronization tool for AI Agent Skills (SKILL.md) across platforms.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/william-garden/sync-skill.git"
+  },
+  "keywords": [
+    "skill",
+    "agent-skills",
+    "skill-md",
+    "sync",
+    "codex",
+    "claude",
+    "cursor",
+    "gemini",
+    "copilot",
+    "opencode"
+  ],
+  "author": "William Koo",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/william-garden/sync-skill/issues"
+  },
+  "homepage": "https://github.com/william-garden/sync-skill#readme",
+  "type": "module",
+  "main": "src/cli.js",
+  "bin": {
+    "sync-skill": "./bin/sync-skill.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^5.0.1"
+  },
+  "files": [
+    "bin/",
+    "docs/",
+    "src/",
+    "README.md",
+    "package.json"
+  ]
+}
