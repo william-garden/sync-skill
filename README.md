@@ -1,14 +1,14 @@
 # sync-skill
 
-[中文](https://github.com/william-garden/sync-skill/blob/master/docs/zh.md)
+[中文](https://github.com/william-garden/sync-skill/blob/main/docs/zh.md)
 
-One-click synchronization tool for **AI Agent Skills** (`SKILL.md`) across coding agents and IDEs.
+One-click synchronization tool for **AI Skills** (`SKILL.md`) across coding agents and IDEs.
 
 ## 1. Overview
 
 `sync-skill` copies your Agent Skills from one AI tool into another. Agent Skills use the open **`SKILL.md` format** — a skill is just a folder containing a `SKILL.md` file (YAML frontmatter plus Markdown instructions) and optional scripts/assets. Because every supported platform reads the *same* format, syncing is simply a matter of copying skill folders from one platform's skills directory into another's. No format conversion is needed.
 
-Each platform stores skills in a different directory, so `sync-skill` knows where every tool looks and moves your skills there safely — backing up anything it overwrites and never deleting skills that only exist on the target.
+Each platform stores skills in a different directory, so `sync-skill` knows where every tool looks and moves your skills there safely — asking for confirmation before it replaces anything that already exists on the target, and never deleting skills that only exist there.
 
 ## 2. Technical Specifications
 
@@ -83,7 +83,7 @@ Notes:
 - **Two modes:** direct CLI (copy all) and interactive (select individual skills).
 - **Two scopes:** `global` (personal) and `project` (workspace).
 - **Non-destructive merge:** skills that exist only on the target are left untouched.
-- **Backup before overwrite:** any skill folder about to be overwritten is backed up first.
+- **Overwrite confirmation:** if a skill of the same name already exists on the target, `sync-skill` shows the source vs. target `version` (when declared) and asks before replacing it.
 - **Model-field awareness:** reports skills whose frontmatter is bound to a specific model (see below).
 
 ## 7. Model-Related Fields and Manual Adjustment
@@ -105,15 +105,21 @@ These values belong to Anthropic's model family. When a skill is synced to Gemin
 [sync-skill] Cursor uses a different model family. These values were copied as-is — please edit them manually.
 ```
 
-## 8. Backup Mechanism
+## 8. Overwrite Confirmation
 
-Before overwriting an existing target skill folder, `sync-skill` copies it into a timestamped backup tree under your home directory:
+When a source skill shares its folder name with a skill already present on the target, `sync-skill` does **not** overwrite it silently. Instead it:
+
+1. Tells you the skill already exists on the target.
+2. Shows the source and target `version` (read from each `SKILL.md` frontmatter), if either side declares one.
+3. Asks you to confirm the replacement.
 
 ```
-~/.sync-skill/backup/<timestamp>/<original-absolute-path>/
+[sync-skill] "demo" already exists in Cursor (~/.cursor/skills).
+[sync-skill]   Source version: 2.0.0  Target version: 1.0.0
+? Replace "demo"? This cannot be undone — no backup will be kept. (y/N)
 ```
 
-For example, overwriting `~/.cursor/skills/demo` creates a copy at `~/.sync-skill/backup/1782788522031/.../.cursor/skills/demo/` before the new skill is written. Backups are never pruned automatically.
+This applies in both interactive and direct (`npx sync-skill <source> <target>`) mode. Declining leaves the existing target skill untouched (reported as **Skipped**); accepting replaces it permanently — **no backup is kept**, so make sure you no longer need the existing version before confirming.
 
 ## 9. Platform Compatibility
 

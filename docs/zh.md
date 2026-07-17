@@ -2,13 +2,13 @@
 
 [English](https://github.com/william-garden/sync-skill)
 
-跨编程助手与 IDE 一键同步 **AI Agent Skills**（`SKILL.md`）的工具。
+跨编程助手与 IDE 一键同步 **AI Skills**（`SKILL.md`）的工具。
 
 ## 1. 概述
 
 `sync-skill` 把你的 Agent Skills 从一个 AI 工具复制到另一个工具。Agent Skills 采用开放的 **`SKILL.md` 格式**——一个 skill 就是一个文件夹，内含 `SKILL.md`（YAML frontmatter + Markdown 指令）以及可选的脚本/资源。由于所有受支持的平台读取的是*同一种*格式，同步只需把 skill 文件夹从一个平台的 skills 目录复制到另一个平台的 skills 目录，**无需任何格式转换**。
 
-每个平台把 skill 存放在不同目录，`sync-skill` 知道各工具的查找位置，并安全地把 skill 搬过去——覆盖前先备份，且绝不删除仅存在于目标端的 skill。
+每个平台把 skill 存放在不同目录，`sync-skill` 已获知各工具的查找位置，并安全地把 skill 搬过去——替换目标端已存在的内容前会先征求确认，且绝不删除仅存在于目标端的 skill。
 
 ## 2. 技术规格
 
@@ -83,7 +83,7 @@ npx -y sync-skill
 - **两种模式：** 直接 CLI（复制全部）与交互式（逐个勾选 skill）。
 - **两种作用域：** `global`（个人）与 `project`（工作区）。
 - **非破坏性合并：** 仅存在于目标端的 skill 不会被改动。
-- **覆盖前备份：** 即将被覆盖的 skill 文件夹会先被备份。
+- **覆盖前确认：** 若目标端已存在同名 skill，会展示源端与目标端的 `version`（如有声明），并询问是否替换。
 - **模型字段提醒：** 报告 frontmatter 绑定了特定模型的 skill（见下）。
 
 ## 7. 模型相关字段与手动调整
@@ -105,15 +105,21 @@ skill 的 `SKILL.md` frontmatter 分为**通用字段**（`name`、`description`
 [sync-skill] Cursor uses a different model family. These values were copied as-is — please edit them manually.
 ```
 
-## 8. 文件备份机制
+## 8. 覆盖确认机制
 
-在覆盖已存在的目标 skill 文件夹之前，`sync-skill` 会先把它复制到主目录下带时间戳的备份目录树中：
+当源端 skill 与目标端某个 skill 文件夹同名时，`sync-skill` **不会**默默覆盖它，而是会：
+
+1. 提示该 skill 已存在于目标端。
+2. 展示源端与目标端各自 `SKILL.md` frontmatter 中声明的 `version`（如果任一方声明了）。
+3. 询问你是否确认替换。
 
 ```
-~/.sync-skill/backup/<时间戳>/<原始绝对路径>/
+[sync-skill] "demo" already exists in Cursor (~/.cursor/skills).
+[sync-skill]   Source version: 2.0.0  Target version: 1.0.0
+? Replace "demo"? This cannot be undone — no backup will be kept. (y/N)
 ```
 
-例如覆盖 `~/.cursor/skills/demo` 时，会先在 `~/.sync-skill/backup/1782788522031/.../.cursor/skills/demo/` 生成一份副本，再写入新的 skill。备份不会被自动清理。
+无论交互模式还是直接模式（`npx sync-skill <source> <target>`）都会触发此确认。选择否则保留目标端现有 skill 不变（结果中标记为 **Skipped**）；选择是则永久替换——**不会保留任何备份**，请确认自己确实不再需要现有版本后再确认替换。
 
 ## 9. 平台兼容性
 

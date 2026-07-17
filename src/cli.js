@@ -2,7 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
-import { checkbox, select } from '@inquirer/prompts';
+import { checkbox, confirm, select } from '@inquirer/prompts';
 
 import {
   PLATFORMS,
@@ -166,24 +166,43 @@ async function performSync({ source, target, scope, selected = null }) {
     throw new Error(`No skills found in ${source.name} (${formatPathForDisplay(sourceDir)}).`);
   }
 
-  const result = await syncSkillFolders({ sourceDir, targetDir, selected });
+  async function confirmOverwrite({ skill, existingFrontmatter }) {
+    console.log(
+      `[sync-skill] "${skill.name}" already exists in ${target.name} (${formatPathForDisplay(targetDir)}).`,
+    );
+    const sourceVersion = skill.frontmatter?.version;
+    const targetVersion = existingFrontmatter?.version;
+    if (sourceVersion || targetVersion) {
+      console.log(
+        `[sync-skill]   Source version: ${sourceVersion ?? '(none)'}  Target version: ${targetVersion ?? '(none)'}`,
+      );
+    }
+    return confirm({
+      message: `Replace "${skill.name}"? This cannot be undone — no backup will be kept.`,
+      default: false,
+    });
+  }
 
-  if (result.skills.length === 0) {
+  const result = await syncSkillFolders({ sourceDir, targetDir, selected, onConflict: confirmOverwrite });
+
+  if (result.skills.length === 0 && result.skipped.length === 0) {
     console.log('[sync-skill] Nothing to sync.');
     return;
   }
 
-  console.log(
-    `[sync-skill] Synced ${result.skills.length} skill(s) ${source.name} -> ${target.name} (${formatPathForDisplay(targetDir)}).`,
-  );
+  if (result.skills.length > 0) {
+    console.log(
+      `[sync-skill] Synced ${result.skills.length} skill(s) ${source.name} -> ${target.name} (${formatPathForDisplay(targetDir)}).`,
+    );
+  }
   if (result.copied.length > 0) {
     console.log(`[sync-skill]   Added: ${result.copied.join(', ')}`);
   }
   if (result.overwritten.length > 0) {
-    console.log(`[sync-skill]   Overwritten (backed up): ${result.overwritten.join(', ')}`);
+    console.log(`[sync-skill]   Overwritten: ${result.overwritten.join(', ')}`);
   }
-  if (result.backups.length > 0) {
-    console.log(`[sync-skill]   Backups stored under ${formatPathForDisplay(path.join(os.homedir(), '.sync-skill', 'backup'))}`);
+  if (result.skipped.length > 0) {
+    console.log(`[sync-skill]   Skipped (kept existing): ${result.skipped.join(', ')}`);
   }
 
   reportModelFields(result.skills, target);

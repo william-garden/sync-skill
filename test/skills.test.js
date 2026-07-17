@@ -71,14 +71,12 @@ test('collectModelFields reports skills with model/effort fields', async (t) => 
   assert.deepEqual(report[0].fields, { model: 'opus', effort: 'high' });
 });
 
-test('syncSkillFolders copies new, backs up overwrites, preserves unrelated skills', async (t) => {
+test('syncSkillFolders copies new, overwrites existing (no callback), preserves unrelated skills', async (t) => {
   const sourceDir = await tmp('sync-skill-src-');
   const targetDir = await tmp('sync-skill-tgt-');
-  const home = await tmp('sync-skill-home-');
   t.after(() => Promise.all([
     rm(sourceDir, { recursive: true, force: true }),
     rm(targetDir, { recursive: true, force: true }),
-    rm(home, { recursive: true, force: true }),
   ]));
 
   await writeSkill(sourceDir, 'alpha', { name: 'alpha', description: 'New skill' }, 'NEW alpha');
@@ -88,22 +86,67 @@ test('syncSkillFolders copies new, backs up overwrites, preserves unrelated skil
   await writeSkill(targetDir, 'beta', { name: 'beta', description: 'Old' }, 'OLD beta');
   await writeSkill(targetDir, 'gamma', { name: 'gamma', description: 'Keep me' }, 'gamma');
 
-  const result = await syncSkillFolders({ sourceDir, targetDir, home });
+  const result = await syncSkillFolders({ sourceDir, targetDir });
 
   assert.deepEqual(result.copied, ['alpha']);
   assert.deepEqual(result.overwritten, ['beta']);
-  assert.equal(result.backups.length, 1);
+  assert.deepEqual(result.skipped, []);
 
   // alpha copied, beta updated to new content, gamma preserved.
   const names = (await readdir(targetDir)).sort();
   assert.deepEqual(names, ['alpha', 'beta', 'gamma']);
   assert.match(await readFile(path.join(targetDir, 'beta', 'SKILL.md'), 'utf-8'), /NEW beta/);
   assert.match(await readFile(path.join(targetDir, 'gamma', 'SKILL.md'), 'utf-8'), /gamma/);
+});
 
-  // The backup under the injected home holds the OLD beta content.
-  const backupRoot = path.join(home, '.sync-skill', 'backup');
-  assert.match(await readFile(path.join(result.backups[0], 'SKILL.md'), 'utf-8'), /OLD beta/);
-  assert.ok(result.backups[0].startsWith(backupRoot));
+test('syncSkillFolders skips overwrite when onConflict declines, leaving the existing skill untouched', async (t) => {
+  const sourceDir = await tmp('sync-skill-conflict-src-');
+  const targetDir = await tmp('sync-skill-conflict-tgt-');
+  t.after(() => Promise.all([
+    rm(sourceDir, { recursive: true, force: true }),
+    rm(targetDir, { recursive: true, force: true }),
+  ]));
+
+  await writeSkill(sourceDir, 'beta', { name: 'beta', description: 'Updated' }, 'NEW beta');
+  await writeSkill(targetDir, 'beta', { name: 'beta', description: 'Old' }, 'OLD beta');
+
+  const result = await syncSkillFolders({
+    sourceDir,
+    targetDir,
+    onConflict: async () => false,
+  });
+
+  assert.deepEqual(result.copied, []);
+  assert.deepEqual(result.overwritten, []);
+  assert.deepEqual(result.skipped, ['beta']);
+  assert.deepEqual(result.skills, []);
+  assert.match(await readFile(path.join(targetDir, 'beta', 'SKILL.md'), 'utf-8'), /OLD beta/);
+});
+
+test('syncSkillFolders passes source and existing target frontmatter to onConflict', async (t) => {
+  const sourceDir = await tmp('sync-skill-ver-src-');
+  const targetDir = await tmp('sync-skill-ver-tgt-');
+  t.after(() => Promise.all([
+    rm(sourceDir, { recursive: true, force: true }),
+    rm(targetDir, { recursive: true, force: true }),
+  ]));
+
+  await writeSkill(sourceDir, 'beta', { name: 'beta', version: '2.0.0' }, 'NEW beta');
+  await writeSkill(targetDir, 'beta', { name: 'beta', version: '1.0.0' }, 'OLD beta');
+
+  let received;
+  const result = await syncSkillFolders({
+    sourceDir,
+    targetDir,
+    onConflict: async (conflict) => {
+      received = conflict;
+      return true;
+    },
+  });
+
+  assert.equal(received.skill.frontmatter.version, '2.0.0');
+  assert.equal(received.existingFrontmatter.version, '1.0.0');
+  assert.deepEqual(result.overwritten, ['beta']);
 });
 
 test('syncSkillFolders honours the selected subset', async (t) => {

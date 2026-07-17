@@ -174,6 +174,20 @@ export function parseFrontmatter(text) {
   return result;
 }
 
+// Read and parse the frontmatter of a single skill folder's SKILL.md.
+// Returns null if there's no SKILL.md, or {} if it's unreadable/invalid.
+export async function readSkillFrontmatter(skillPath) {
+  const skillMd = path.join(skillPath, 'SKILL.md');
+  if (!(await pathExists(skillMd))) {
+    return null;
+  }
+  try {
+    return parseFrontmatter(await readFile(skillMd, 'utf-8'));
+  } catch {
+    return {};
+  }
+}
+
 // List the skill folders inside a skills directory. Each entry is an immediate
 // sub-directory containing a SKILL.md file. Returns [] if the directory is
 // missing. Sorted by name for stable output.
@@ -191,16 +205,9 @@ export async function listSkillFolders(dir) {
       continue;
     }
     const skillPath = path.join(dir, entry.name);
-    const skillMd = path.join(skillPath, 'SKILL.md');
-    if (!(await pathExists(skillMd))) {
+    const frontmatter = await readSkillFrontmatter(skillPath);
+    if (frontmatter === null) {
       continue;
-    }
-
-    let frontmatter = {};
-    try {
-      frontmatter = parseFrontmatter(await readFile(skillMd, 'utf-8'));
-    } catch {
-      // Unreadable/invalid frontmatter: still list the skill, just without meta.
     }
 
     skills.push({
@@ -238,36 +245,22 @@ export async function copySkillFolder(srcDir, destDir) {
   await cp(srcDir, destDir, { recursive: true });
 }
 
-// Copy an existing target skill folder into the timestamped backup tree before
-// it gets overwritten. Returns the backup path, or null if there was nothing to
-// back up. `home` is injectable for testing.
-export async function backupSkill(targetSkillPath, options = {}) {
-  const { home = os.homedir() } = options;
-  if (!(await pathExists(targetSkillPath))) {
-    return null;
-  }
-
-  const backupRoot = path.join(home, '.sync-skill', 'backup');
-  const timestampDir = path.join(backupRoot, String(Date.now()));
-  const relative = path.relative(path.parse(targetSkillPath).root, path.resolve(targetSkillPath));
-  const destination = path.join(timestampDir, relative);
-
-  await mkdir(path.dirname(destination), { recursive: true });
-  await cp(targetSkillPath, destination, { recursive: true });
-
-  return destination;
-}
-
 // Core sync routine (pure of any console I/O so it can be unit-tested):
-// copy the chosen source skills into the target directory, backing up and
-// overwriting same-named skills, and never touching target skills that don't
-// exist in the source (non-destructive merge).
+// copy the chosen source skills into the target directory, and never touch
+// target skills that don't exist in the source (non-destructive merge).
+//
+// When a source skill shares its name with an existing target skill, the
+// optional `onConflict({ skill, existingFrontmatter })` callback decides
+// whether to proceed — if it resolves falsy, the existing target skill is
+// left untouched and the name is reported in `skipped`. Without a callback,
+// conflicts are overwritten unconditionally (matching historical behaviour).
+// Overwrites are permanent: no backup of the replaced folder is kept.
 export async function syncSkillFolders(options) {
   const {
     sourceDir,
     targetDir,
     selected = null,
-    home = os.homedir(),
+    onConflict = null,
   } = options;
 
   const sourceSkills = await listSkillFolders(sourceDir);
@@ -279,14 +272,18 @@ export async function syncSkillFolders(options) {
 
   const copied = [];
   const overwritten = [];
-  const backups = [];
+  const skipped = [];
 
   for (const skill of chosen) {
     const destination = path.join(targetDir, skill.name);
     if (await pathExists(destination)) {
-      const backup = await backupSkill(destination, { home });
-      if (backup) {
-        backups.push(backup);
+      if (onConflict) {
+        const existingFrontmatter = await readSkillFrontmatter(destination);
+        const proceed = await onConflict({ skill, existingFrontmatter });
+        if (!proceed) {
+          skipped.push(skill.name);
+          continue;
+        }
       }
       await rm(destination, { recursive: true, force: true });
       await copySkillFolder(skill.path, destination);
@@ -297,7 +294,12 @@ export async function syncSkillFolders(options) {
     }
   }
 
-  return { copied, overwritten, backups, skills: chosen };
+  return {
+    copied,
+    overwritten,
+    skipped,
+    skills: chosen.filter((skill) => !skipped.includes(skill.name)),
+  };
 }
 
 export async function pathExists(targetPath) {
