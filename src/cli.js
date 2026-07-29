@@ -210,11 +210,8 @@ async function performSync({ source, target, scope, selected = null }) {
 
 function reportModelFields(skills, target) {
   const report = collectModelFields(skills);
-  if (report.length === 0) {
-    return;
-  }
-
-  console.log('');
+  if (report.length === 0) return;
+  
   console.log('[sync-skill] Heads up — some synced skills declare model-specific fields:');
   for (const { name, fields } of report) {
     const parts = Object.entries(fields).map(([key, value]) => `${key}: ${value}`).join(', ');
